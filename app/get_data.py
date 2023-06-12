@@ -37,6 +37,9 @@ def read_revolut():
         df = df.merge(df_dic, on='Description', how='left')
         df['Category'] = df['Category'].fillna('Other')
 
+        # save unassigned transactions
+        output_unassigned_transactions(df)
+
         # remove redundant columns
         df = df.drop(columns=['Type', 'Product', 'Completed Date', 'Description', 'Fee', 'State', 'Balance'])
 
@@ -58,7 +61,7 @@ def read_revolut():
 def read_tinkoff():
     try:
         file = get_last_file('statements/tinkoff')
-        df = pd.read_csv(file, sep=';', quotechar='"', encoding='windows-1251')
+        df = pd.read_csv(file, sep=';', quotechar='"', encoding='cp1251')
         logger.info(f'Read {len(df)} rows from Tinkoff')
 
         df = df[df['Статус'] != 'FAILED']
@@ -72,6 +75,7 @@ def read_tinkoff():
 
         df.loc[df['Category'] == 'Переводы', 'Category'] = df['Category'] + ': ' + df['Description']
         df.loc[df['Category'] == 'НКО', 'Category'] = df['Category'] + ': ' + df['Description']
+        df.loc[df['Category'] == 'Другое', 'Category'] = df['Category'] + ': ' + df['Description']
 
         # remove internal operations
         df = df[df['Category'] != 'Переводы: Перевод между счетами']
@@ -81,6 +85,9 @@ def read_tinkoff():
         df = df.rename(columns={'Category': 'Description'})
         df = df.merge(df_dic, on='Description', how='left')
         df['Category'] = df['Category'].fillna('Other')
+
+        # save unassigned transactions
+        output_unassigned_transactions(df)
 
         # remove redundant columns
         df = df.drop(columns=['Дата платежа', 'Description', 'Номер карты', 'Сумма операции с округлением',
@@ -115,6 +122,9 @@ def read_moneylover():
         # df['Category'] = df['Category'].fillna(df['Description'] + ': ' + df['Note'])
         df['Category'] = df['Category'].fillna('Other')
 
+        # save unassigned transactions
+        output_unassigned_transactions(df)
+
         # remove redundant columns
         df = df.drop(columns=['Id', 'Description', 'Note', 'Wallet'])
 
@@ -146,3 +156,20 @@ def union_statements():
     except Exception as e:
         logger.exception("Error in union_statements: %s", e)
         return pd.DataFrame()
+
+
+def output_unassigned_transactions(df, filename='unassigned_transactions.csv'):
+    unassigned_df = df[df['Category'] == 'Other']
+    grouped_df = unassigned_df.groupby('Description').size().reset_index(name='Count')
+    grouped_df = grouped_df.sort_values(by='Count', ascending=False)
+    with open(filename, 'a', encoding='utf-8-sig') as f:
+        grouped_df.to_csv(f, header=f.tell() == 0, index=False)
+
+
+def clear_files(files=None):
+    if files is None:
+        files = ['unassigned_transactions.csv']
+    for file in files:
+        if os.path.exists(file):
+            os.remove(file)
+            logger.info(f'Deleted file: {file}')

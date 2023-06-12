@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
+    get_data.clear_files()
     df = get_data.union_statements()
     df = transform.convert_currency(df, commissions=1.07)
     df = transform.add_income_source(df)
